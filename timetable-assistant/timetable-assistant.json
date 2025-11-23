@@ -1,0 +1,166 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -736,
+        1072
+      ],
+      "id": "c7960ae4-61cf-4532-bc7d-ea7228ac3383",
+      "name": "Telegram Incoming Message"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        1296
+      ],
+      "id": "69fd8716-3a68-4bea-b824-2f92bf15b8b1",
+      "name": "Gemini AI Chat Model"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1jP4L26G5CDF79anFGHdqRROrH2fGpz9wkPqcnmcKyzc",
+          "mode": "list",
+          "cachedResultName": "Time Tables",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jP4L26G5CDF79anFGHdqRROrH2fGpz9wkPqcnmcKyzc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $fromAI('sheet_name', 'The name of the Google Sheet to search in', 'string') }}",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -256,
+        1296
+      ],
+      "id": "d0cf479a-43da-427d-90e5-d7a5d5b6515d",
+      "name": "Fetch Timetable from Google Sheets"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $execution.id }}",
+        "contextWindowLength": 13
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -384,
+        1296
+      ],
+      "id": "9b7edb5d-3556-48e4-927a-db761836b945",
+      "name": "Conversation Memory Buffer1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message?.text || $json.text || 'No text message' }}",
+        "options": {
+          "systemMessage": "You are a friendly timetable assistant that helps students find information from their class schedules.\n\nAvailable sheets in the Time Tables document:\n- 1CST S II (First year, Second semester)\n- 2CST-SIV (Second year, Fourth semester)\n- 3CS-S VI (Third year, Sixth semester)\n- 4CST-S VII (Fourth year, Seventh semester)\n- 4CST-SVIII (Fourth year, Eighth semester)\n\nYour task is to:\n1. Analyze the user's question to determine the scope:\n   - If asking about a SPECIFIC year/semester/section → query only that sheet\n   - If asking about FREE ROOMS, AVAILABLE ROOMS, or general availability → query ALL sheets to get complete information\n2. Map year/semester references to EXACT sheet names\n3. Use the Google Sheets tool (call it multiple times if needed for different sheets)\n4. Analyze and consolidate data from all relevant sheets\n5. Present information in a clear, conversational format\n6. NEVER show raw JSON or technical data\n\nSheet Name Mapping:\n- \"first year\" or \"1st year\" or \"sem 2\" → \"1CST S II\"\n- \"second year\" or \"2nd year\" or \"sem 4\" → \"2CST-SIV\"\n- \"third year\" or \"3rd year\" or \"sem 6\" → \"3CS-S VI\"\n- \"fourth year sem 7\" or \"4th year sem 7\" → \"4CST-S VII\"\n- \"fourth year sem 8\" or \"4th year sem 8\" → \"4CST-SVIII\"\n\nFor FREE ROOM queries:\n- Query ALL 5 sheets (call the tool 5 times with different sheet names)\n- Identify which rooms are occupied at the specified time/day\n- Compile a list of rooms that are NOT occupied\n- Present the free rooms clearly organized by building/floor if possible\n\nResponse Format:\n- Natural, conversational tone\n- Use bullet points or numbered lists\n- For free rooms: group by location or list all available rooms\n- Be helpful and friendly\n- Transform data into readable format, never show raw JSON"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -464,
+        1072
+      ],
+      "id": "4672f971-6636-486a-b099-e3249eefab38",
+      "name": "Timetable Assistant Agent"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Incoming Message').item.json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -48,
+        1072
+      ],
+      "id": "2b662e13-35a0-43fe-bb8d-49aef66def0e",
+      "name": "Telegram Send Message"
+    }
+  ],
+  "connections": {
+    "Telegram Incoming Message": {
+      "main": [
+        [
+          {
+            "node": "Timetable Assistant Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Timetable Assistant Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Timetable from Google Sheets": {
+      "ai_tool": [
+        [
+          {
+            "node": "Timetable Assistant Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory Buffer1": {
+      "ai_memory": [
+        [
+          {
+            "node": "Timetable Assistant Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Timetable Assistant Agent": {
+      "main": [
+        [
+          {
+            "node": "Telegram Send Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
