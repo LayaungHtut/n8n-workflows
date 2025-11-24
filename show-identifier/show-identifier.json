@@ -1,0 +1,345 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -448,
+        224
+      ],
+      "id": "fabff3b8-1a43-4fb1-96c9-24e250c748f2",
+      "name": "Telegram Message Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b2f665d5-af09-45a3-9e8b-9c8950862e60",
+              "leftValue": "={{ $json.message.photo }}",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        224
+      ],
+      "id": "c79acc93-79c0-4369-b94d-d58ed23e1d98",
+      "name": "Message Type Check"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.photo[$json.message.photo.length - 1].file_id.trim() }}",
+        "additionalFields": {}
+      },
+      "id": "73c32dec-54f2-405c-abba-05b1fb02f09d",
+      "name": "Telegram Photo Downloader",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        64,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a helpful image analysis assistant.\n\nYour tasks:\n- Describe the image clearly and accurately.\n- Identify objects, people, text, actions, and context.\n- If relevant, mention setting, mood, and important visual details.\n- If franchise characters or logos appear, identify them safely.\n- If text appears, transcribe it exactly.\n\nFormatting rules:\n- Use **text** for bold emphasis (example: **Spider-Man**, **Marvel**).\n- Use bullet points starting with - for lists.\n- NO parentheses, NO brackets, NO underscores.\n- Avoid unnecessary symbols.\n- Keep your explanation clean and simple.\n\nIf the user includes a searchQuery, your output should also produce short franchise/category labels when possible.\n",
+        "options": {
+          "systemMessage": "You are a helpful image analysis assistant. Describe images in detail, identifying objects, people, text, and context.\n\nFormat your response using these rules: Use **text** for bold emphasis on character names and franchise titles. Use bullet points with - for lists. Keep formatting simple and clear. Do NOT use special characters like parentheses, brackets, or underscores unless necessary.",
+          "passthroughBinaryImages": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        352,
+        -32
+      ],
+      "id": "06dd7adb-e90e-4785-8c98-477f603c8710",
+      "name": "Main AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        368,
+        192
+      ],
+      "id": "59dfebf4-4e88-4d2e-b3bc-e8163ef617e1",
+      "name": "Gemini Chat (Main)",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "oeSxedukpmxA2kGO",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the output from AI Agent safely\nconst output = $json.output ?? ''; // fallback to empty string if undefined\n\n// Function to escape MarkdownV2 special characters\nconst escapeMarkdownV2 = (text) => {\n  // Escape all special characters for MarkdownV2\n  let processed = text;\n  processed = processed.replace(/([_[\\]()~`>#+\\-=|{}.!])/g, '\\\\$1');\n  processed = processed.replace(/\\*/g, '\\\\*');\n  return processed;\n};\n\n// Return the escaped output\nreturn [{ json: { output: escapeMarkdownV2(output) } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        80
+      ],
+      "id": "9072ee75-1a39-4ef9-87d7-81155df57619",
+      "name": "Process AI Output (Main)"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Message Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.output }}\n\n",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2"
+        }
+      },
+      "id": "cb8b72f8-b0cd-4c82-a49c-1a31dbe41f4c",
+      "name": "Telegram Responder (Main)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        928,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "==={{ $json.message.text }}\n\nYou are a helpful Telegram chatbot assistant.\n\nYour goals:\n- Respond naturally, friendly, and conversationally.\n- Keep responses short unless the user asks for long explanations.\n- ALWAYS avoid MarkdownV2 breaking characters unless needed.\n- NEVER add backslashes, escape characters, or code formatting unless the system forces it later.\n- If the user asks for advice, explain clearly using simple wording.\n- If the user greets you, greet them warmly.\n- If the user asks follow-up questions, maintain context naturally.\n- If the user uses Burmese, respond in Burmese unless asked otherwise.\n- If the message is unclear, ask a gentle clarifying question instead of assuming.\n\nTone:\n- Friendly, helpful, supportive.\n- Sound like a real human chat partner.\n- Avoid robotic or overly formal wording.\n\nDO NOT:\n- Use emojis unless the user uses them first.\n- Use complicated formatting.\n- Use parentheses or brackets unnecessarily.\n\nYour job is simply to read the message above and reply like a friendly assistant.\n",
+        "options": {
+          "systemMessage": "You are a helpful Telegram chatbot assistant. Respond naturally to user messages in a friendly and conversational manner."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        0,
+        368
+      ],
+      "id": "f4eb5dba-55dc-480e-8a54-5f944601ccc1",
+      "name": "Secondary AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        80,
+        592
+      ],
+      "id": "9dcc0e3f-fcc5-403a-ba6c-4b48a481705a",
+      "name": "Gemini Chat (Secondary)",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Un0Z1DfhrziHGncH",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the output from AI Agent\nconst output = $json.output;\n\n// Function to escape MarkdownV2 special characters\n// but preserve intentional formatting (bold with *, italic with _, etc.)\nconst escapeMarkdownV2 = (text) => {\n  // First, protect intentional formatting by temporarily replacing it\n  // This regex finds text wrapped in * or _ for formatting\n  let processed = text;\n  \n  // Escape all special characters that need escaping in MarkdownV2\n  // These are: _ * [ ] ( ) ~ ` > # + - = | { } . !\n  // But we'll be smart about it - only escape if not part of intentional formatting\n  \n  // For now, escape everything except asterisks that appear to be intentional formatting\n  // (i.e., paired asterisks with content between them)\n  processed = processed.replace(/([_\\[\\]()~`>#+\\-=|{}.!])/g, '\\\\$1');\n  \n  // Handle asterisks: escape single asterisks, but preserve paired ones for bold\n  // This is a simplified approach - escape all asterisks for safety\n  // If you want to preserve bold formatting, you'd need more complex logic\n  processed = processed.replace(/\\*/g, '\\\\*');\n  \n  return processed;\n};\n\n// Return the escaped output\nreturn [{ json: { output: escapeMarkdownV2(output) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        368
+      ],
+      "id": "535c2542-23e1-40ee-828d-4c756af6df0c",
+      "name": "Process AI Output (Secondary)"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Message Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2"
+        }
+      },
+      "id": "ea70ae04-0f24-4bb8-bfbb-320f3c9390cd",
+      "name": "Telegram Responder (Secondary)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        704,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=={{ $json.result.file_id + '-' + $json.message.chat.id }}",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        192
+      ],
+      "id": "fd12aacd-9060-4a70-9c0c-5aa6686bd653",
+      "name": "Conversation Memory"
+    }
+  ],
+  "connections": {
+    "Telegram Message Trigger": {
+      "main": [
+        [
+          {
+            "node": "Message Type Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Type Check": {
+      "main": [
+        [
+          {
+            "node": "Telegram Photo Downloader",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Secondary AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Photo Downloader": {
+      "main": [
+        [
+          {
+            "node": "Main AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Process AI Output (Main)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat (Main)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Main AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Output (Main)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Responder (Main)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secondary AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Process AI Output (Secondary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat (Secondary)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Secondary AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process AI Output (Secondary)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Responder (Secondary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Main AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "Secondary AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d25f618113291e78cfd594b11bcd9ffbc03e67f1da02c76000cb56f7ae327c5f"
+  }
+}
